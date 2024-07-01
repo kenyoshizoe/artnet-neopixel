@@ -138,6 +138,18 @@ endif
 
 # Generate dependency information
 CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)"
+
+#######################################
+# SEGGER_RTT
+#######################################
+C_SOURCES += \
+lib/SEGGER_RTT/RTT/SEGGER_RTT.c \
+lib/SEGGER_RTT/RTT/SEGGER_RTT_printf.c \
+
+C_INCLUDES += \
+-I lib/SEGGER_RTT/RTT \
+-I lib/SEGGER_RTT/Config
+
 #######################################
 # User Application
 #######################################
