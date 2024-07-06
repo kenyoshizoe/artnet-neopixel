@@ -11,9 +11,8 @@ class NeoPixel {
  public:
   NeoPixel(TIM_HandleTypeDef* htim, uint32_t channel)
       : htim_(htim), channel_(channel) {
-    for (int i = 0; i < kFirstPadding + kLedNum * 24 + kNeoPixelLastPadding;
-         i++) {
-      if (9 < i && i < kLedNum * 24) {
+    for (int i = 0; i < buf_size; i++) {
+      if (kFirstPadding <= i && i < kFirstPadding + kLedNum * 24) {
         buf_[i] = kNeoPixelZero;
       } else {
         buf_[i] = 0;
@@ -46,7 +45,7 @@ class NeoPixel {
   const uint32_t channel_;
 
   static constexpr int kFirstPadding = 3;
-  static constexpr int kNeoPixelLastPadding = 1;
+  static constexpr int kNeoPixelLastPadding = 10;
   static constexpr int buf_size =
       kFirstPadding + kLedNum * 24 + kNeoPixelLastPadding;
   uint8_t buf_[kFirstPadding + kLedNum * 24 + kNeoPixelLastPadding];
