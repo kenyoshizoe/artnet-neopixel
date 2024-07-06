@@ -1,0 +1,3 @@
+[submodule "artnet_neopixel/lib/etl"]
+	path = artnet_neopixel/lib/etl
+	url = https://github.com/ETLCPP/etl.git
