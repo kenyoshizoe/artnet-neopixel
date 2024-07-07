@@ -1,6 +1,7 @@
 #include "artnet_neopixel/app/app.h"
 
 #include "SEGGER_RTT.h"
+#include "artnet_neopixel/artnet/ArtNode.h"
 #include "artnet_neopixel/module/neopixel.h"
 #include "dhcp.h"
 #include "main.h"
@@ -24,7 +25,30 @@ wiz_NetInfo gWIZNETINFO = {
     {8, 8, 8, 8},                          // DNS server
     NETINFO_DHCP                           // DHCP
 };
-uint8_t SOCK_DHCP = 0;
+uint8_t dhcp_buf[2048];
+uint8_t SOCK_UDPS = 0;
+uint8_t SOCK_DHCP = 6;
+
+ArtConfig artnet_config = {
+    .mac = {0x00, 0x08, 0xdc, 0x00, 0x00, 0x00},  // MAC
+    .ip = {2, 3, 4, 5},                           // IP
+    .mask = {255, 0, 0, 0},                       // Subnet mask
+    .udpPort = 0x1936,
+    .dhcp = true,
+    .net = 0,                           // Net (0-127)
+    .subnet = 0,                        // Subnet (0-15)
+    "artnet-neopixel",                  // Short name
+    "artnet-neopixel by ken yoshizoe",  // Long name
+    .numPorts = 12,
+    .portTypes = {PortTypeDmx | PortTypeOutput, PortTypeDmx | PortTypeOutput,
+                  PortTypeDmx | PortTypeOutput, PortTypeDmx | PortTypeOutput},
+    .portAddrIn = {0, 0, 0, 0},   // Port input universes (0-15)
+    .portAddrOut = {0, 1, 2, 3},  // Port output universes (0-15)
+    .verHi = 0,
+    .verLo = 1,
+};
+uint8_t artnet_buffer[1024];
+ArtNode art_node(artnet_config, sizeof(artnet_buffer), artnet_buffer);
 
 void ip_assign(void) {
   getIPfromDHCP(gWIZNETINFO.ip);
@@ -35,6 +59,10 @@ void ip_assign(void) {
   setSUBR(gWIZNETINFO.sn);
   setGAR(gWIZNETINFO.gw);
   setSHAR(gWIZNETINFO.mac);
+
+  for (int i = 0; i < 4; i++) {
+    artnet_config.ip[i] = gWIZNETINFO.ip[i];
+  }
 
   SEGGER_RTT_printf(0, "DHCP LEASED IP %d.%d.%d.%d\n", gWIZNETINFO.ip[0],
                     gWIZNETINFO.ip[1], gWIZNETINFO.ip[2], gWIZNETINFO.ip[3]);
@@ -49,15 +77,21 @@ void InitApp() {
   HAL_GPIO_WritePin(W5500_RESET_GPIO_Port, W5500_RESET_Pin, GPIO_PIN_RESET);
   HAL_Delay(1);
   HAL_GPIO_WritePin(W5500_RESET_GPIO_Port, W5500_RESET_Pin, GPIO_PIN_SET);
-  HAL_Delay(1);
+  HAL_Delay(5);
   uint8_t memsize[2][8] = {{2, 2, 2, 2, 2, 2, 2, 2}, {2, 2, 2, 2, 2, 2, 2, 2}};
   ctlwizchip(CW_INIT_WIZCHIP, (void*)memsize);
   ctlnetwork(CN_SET_NETINFO, (void*)&gWIZNETINFO);
+  // DHCP
   setSHAR(gWIZNETINFO.mac);
-  DHCP_init(SOCK_DHCP, gWIZNETINFO.mac);
+  DHCP_init(SOCK_DHCP, dhcp_buf);
   reg_dhcp_cbfunc(ip_assign, ip_assign, ip_conflict);
-  uint8_t tmpstr[6] = {};
-  ctlwizchip(CW_GET_ID, (void*)tmpstr);
+  // UDP
+  setSn_RXBUF_SIZE(SOCK_UDPS, 4);
+  int res = socket(SOCK_UDPS, Sn_MR_UDP, 0x1936, SF_IO_NONBLOCK);
+  if (res != SOCK_UDPS) {
+    SEGGER_RTT_printf(0, "socket() failed: %d\n", res);
+    Error_Handler();
+  }
 
   HAL_TIM_Base_Start_IT(&htim7);
   HAL_TIM_Base_Start_IT(&htim16);
@@ -77,6 +111,70 @@ void MainApp() {
         break;
       default:
         break;
+    }
+
+    // check phy link status
+    if (!(getPHYCFGR() & PHYCFGR_LNK_ON)) {
+      continue;
+    }
+
+    // check available data
+    if (getSn_RX_RSR(SOCK_UDPS) == 0) {
+      continue;
+    }
+
+    uint8_t ip[4];
+    uint16_t port;
+    int ret =
+        recvfrom(SOCK_UDPS, artnet_buffer, sizeof(artnet_buffer), ip, &port);
+    if (ret <= 0) {
+      continue;
+    }
+
+    if (art_node.isPacketValid()) {
+      uint16_t op_code = art_node.getOpCode();
+      if (op_code == OpPoll) {
+        art_node.createPollReply();
+        sendto(SOCK_UDPS, artnet_buffer, art_node.getPacketSize(), ip,
+               artnet_config.udpPort);
+      } else if (op_code == OpDmx) {
+        ArtDmx* dmx = (ArtDmx*)artnet_buffer;
+
+        if (dmx->getNet() != artnet_config.net) {
+          continue;
+        }
+        if (dmx->getSub() != artnet_config.subnet) {
+          continue;
+        }
+
+        artnet_neopixel::NeoPixel<170>* neopixel = nullptr;
+        switch (dmx->getUni()) {
+          case 0:
+            neopixel = &neopixel1;
+            break;
+          case 1:
+            neopixel = &neopixel2;
+            break;
+          case 2:
+            neopixel = &neopixel3;
+            break;
+          case 3:
+            neopixel = &neopixel4;
+            break;
+        }
+        if (neopixel == nullptr) {
+          continue;
+        }
+
+        for (int i = 0; i < 170; i++) {
+          neopixel->SetColor(i, dmx->Data[i * 3 + 0], dmx->Data[i * 3 + 1],
+                             dmx->Data[i * 3 + 2]);
+        }
+      } else if (op_code == OpSync) {
+        // NOP
+      }
+    } else {
+      SEGGER_RTT_printf(0, "Invalid packet\n");
     }
   }
 }
