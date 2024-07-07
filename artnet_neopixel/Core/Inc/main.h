@@ -81,6 +81,8 @@ void Error_Handler(void);
 #define W5500_RESET_GPIO_Port GPIOB
 #define W5500_ITR_Pin GPIO_PIN_10
 #define W5500_ITR_GPIO_Port GPIOB
+#define W5500_CS_Pin GPIO_PIN_12
+#define W5500_CS_GPIO_Port GPIOB
 #define RUN_LED_Pin GPIO_PIN_11
 #define RUN_LED_GPIO_Port GPIOA
 #define SUBNET2_Pin GPIO_PIN_3
