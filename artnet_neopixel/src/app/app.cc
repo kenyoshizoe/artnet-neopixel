@@ -94,6 +94,20 @@ void InitApp() {
     SEGGER_RTT_printf(0, "socket() failed: %d\n", res);
     Error_Handler();
   }
+  // art-net
+  artnet_config.net =
+      (HAL_GPIO_ReadPin(NET0_GPIO_Port, NET0_Pin) == GPIO_PIN_RESET) << 0 |
+      (HAL_GPIO_ReadPin(NET1_GPIO_Port, NET1_Pin) == GPIO_PIN_RESET) << 1 |
+      (HAL_GPIO_ReadPin(NET2_GPIO_Port, NET2_Pin) == GPIO_PIN_RESET) << 2 |
+      (HAL_GPIO_ReadPin(NET3_GPIO_Port, NET3_Pin) == GPIO_PIN_RESET) << 3;
+  artnet_config.subnet =
+      (HAL_GPIO_ReadPin(SUBNET0_GPIO_Port, SUBNET0_Pin) == GPIO_PIN_RESET)
+          << 0 |
+      (HAL_GPIO_ReadPin(SUBNET1_GPIO_Port, SUBNET1_Pin) == GPIO_PIN_RESET)
+          << 1 |
+      (HAL_GPIO_ReadPin(SUBNET2_GPIO_Port, SUBNET2_Pin) == GPIO_PIN_RESET)
+          << 2 |
+      (HAL_GPIO_ReadPin(SUBNET3_GPIO_Port, SUBNET3_Pin) == GPIO_PIN_RESET) << 3;
 
   HAL_TIM_Base_Start_IT(&htim7);
   HAL_TIM_Base_Start_IT(&htim16);
