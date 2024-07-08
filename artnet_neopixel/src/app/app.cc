@@ -16,6 +16,8 @@ artnet_neopixel::NeoPixel<170> neopixel1(&htim3, TIM_CHANNEL_4);
 artnet_neopixel::NeoPixel<170> neopixel2(&htim3, TIM_CHANNEL_3);
 artnet_neopixel::NeoPixel<170> neopixel3(&htim3, TIM_CHANNEL_1);
 artnet_neopixel::NeoPixel<170> neopixel4(&htim17, TIM_CHANNEL_1);
+artnet_neopixel::NeoPixel<170>* neopixels[] = {&neopixel1, &neopixel2,
+                                               &neopixel3, &neopixel4};
 
 wiz_NetInfo gWIZNETINFO = {
     {0x00, 0x08, 0xdc, 0x00, 0x00, 0x00},  // Mac address
@@ -31,8 +33,8 @@ uint8_t SOCK_DHCP = 6;
 
 ArtConfig artnet_config = {
     .mac = {0x00, 0x08, 0xdc, 0x00, 0x00, 0x00},  // MAC
-    .ip = {2, 3, 4, 5},                           // IP
-    .mask = {255, 0, 0, 0},                       // Subnet mask
+    .ip = {192, 168, 1, 255},                     // IP
+    .mask = {255, 255, 255, 0},                   // Subnet mask
     .udpPort = 0x1936,
     .dhcp = true,
     .net = 0,                           // Net (0-127)
@@ -139,36 +141,15 @@ void MainApp() {
                artnet_config.udpPort);
       } else if (op_code == OpDmx) {
         ArtDmx* dmx = (ArtDmx*)artnet_buffer;
-
-        if (dmx->getNet() != artnet_config.net) {
+        if (dmx->getNet() != artnet_config.net ||
+            dmx->getSub() != artnet_config.subnet)
           continue;
-        }
-        if (dmx->getSub() != artnet_config.subnet) {
-          continue;
-        }
-
-        artnet_neopixel::NeoPixel<170>* neopixel = nullptr;
-        switch (dmx->getUni()) {
-          case 0:
-            neopixel = &neopixel1;
-            break;
-          case 1:
-            neopixel = &neopixel2;
-            break;
-          case 2:
-            neopixel = &neopixel3;
-            break;
-          case 3:
-            neopixel = &neopixel4;
-            break;
-        }
-        if (neopixel == nullptr) {
-          continue;
-        }
+        if (dmx->getUni() >= 4) continue;
 
         for (int i = 0; i < 170; i++) {
-          neopixel->SetColor(i, dmx->Data[i * 3 + 0], dmx->Data[i * 3 + 1],
-                             dmx->Data[i * 3 + 2]);
+          neopixels[dmx->getUni()]->SetColor(i, dmx->Data[i * 3 + 0],
+                                             dmx->Data[i * 3 + 1],
+                                             dmx->Data[i * 3 + 2]);
         }
       } else if (op_code == OpSync) {
         // NOP
